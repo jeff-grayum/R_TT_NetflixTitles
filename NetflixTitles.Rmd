@@ -30,7 +30,8 @@ tuesdata <- tidytuesdayR::tt_load('2021-04-20')
 
 netflix_titles <- tuesdata$netflix_titles %>%
   separate(duration, c("duration", "duration_units"), sep = " ", convert = TRUE ) %>%
-  mutate(date_added = mdy(date_added))
+  mutate(date_added = mdy(date_added),
+         year_added = year(date_added))
 
 netflix_titles %>%
   view()
@@ -59,6 +60,15 @@ netflix_titles %>%
   mutate(percent = n / sum(n)) %>%
   ggplot(aes(decade, percent, color = type)) +
   geom_line()
+
+summarize_titles <- function(tbl) {
+  tbl %>%
+    summarize(n = n(),
+              median_durationb = median(duration),
+              median_year = median(release_year)) %>%
+    arrange(desc(n))
+}
+
 ```
 
 Comparing duration of movies over time.
@@ -110,7 +120,6 @@ netflix_titles %>%
 
 netflix_titles %>%
   filter(!is.na(date_added)) %>%
-  mutate(year_added = pmax(year(date_added), 2015)) %>%
   count(year_added, type) %>%
   ggplot(aes(year_added, n, fill = type)) +
   geom_area(alpha = 0.7) +
@@ -118,5 +127,97 @@ netflix_titles %>%
        y = "",
        fill = "", 
        title = "Titles added to Netflix each year")
+
+netflix_titles %>%
+  mutate(year_added = pmax(year_added, 2015)) %>%
+  filter(!is.na(rating)) %>%
+  count(year_added, rating = fct_lump(rating, 6)) %>%
+  ggplot(aes(year_added, n, fill = rating)) +
+  geom_area(alpha = 0.7) +
+  labs(x = "Year added",
+       y = "",
+       fill = "", 
+       title = "Titles added to Netflix each year")
+
+netflix_titles %>%
+  mutate(year_added = pmax(year_added, 2015)) %>%
+  filter(!is.na(rating)) %>%
+  group_by(type) %>%
+  mutate(rating = fct_lump(rating, 4)) %>%
+  count(year_added, rating = fct_lump(rating, 6)) %>%
+  group_by(type, year_added) %>%
+  mutate(percent = n / sum(n)) %>%
+  ggplot(aes(year_added, percent, fill = rating)) +
+  geom_area(alpha = 0.7) +
+  facet_wrap(~ type) +
+  labs(x = "Year added",
+       y = "",
+       fill = "", 
+       title = "Titles added to Netflix each year") +
+  scale_y_continuous(labels = percent)
+```
+
+Let's look at country.
+```{r}
+netflix_titles %>%
+  filter(!is.na(country)) %>%
+  count(country = fct_lump(country, 16),
+        type,
+        sort = TRUE) %>%
+  mutate(country = fct_reorder(country, n)) %>%
+  ggplot(aes(n, country, fill = type)) +
+  geom_col() +
+  labs(x = "# of titles added",
+       y = "Contry",
+       fill = "",
+       title = "Number of titles added to Netflix by country")
+
+netflix_titles %>%
+  filter(!is.na(country)) %>%
+  filter(type == "Movie") %>%
+  group_by(country) %>%
+  summarize_titles()
+
+netflix_titles %>%
+  filter(rating == "R") %>%
+  count(country, sort = TRUE)
+
+netflix_titles %>%
+  filter(rating %in% c("R", "TV-MA")) %>%
+  count(country, sort = TRUE)
+```
+
+```{r}
+netflix_titles %>%
+  filter(duration_units == "min") %>%
+  mutate(country = fct_lump(country, 9)) %>%
+  group_by(country) %>%
+  summarize(mean_length = mean(duration)) %>%
+  filter(country != "Other") %>%
+  mutate(country = fct_reorder(country, mean_length)) %>%
+  ggplot(aes(mean_length, country, fill = country)) +
+  geom_col() +
+  labs(x = "Avg length", 
+       y = "",
+       title = "Average length of Netflix titles by country") +
+  theme(legend.position = "none")
+  
+netflix_titles %>%
+  filter(duration_units == "min") %>%
+  mutate(director = fct_lump(director, 9)) %>%
+  group_by(director) %>%
+  summarize(mean_length = mean(duration)) %>%
+  filter(director != "Other") %>%
+  mutate(director = fct_reorder(director, mean_length)) %>%
+  ggplot(aes(mean_length, director, fill = director)) +
+  geom_col() +
+  labs(x = "Avg length", 
+       y = "",
+       title = "Average length of Netflix titles by most popular directors") +
+  theme(legend.position = "none")  
+
+  #mutate(mean_rating = fct_reorder(mean_rating, n)) %>% 
+  ggplot(aes(mean_rating, director)) +
+  geom_col()
 ```
 
