@@ -21,6 +21,9 @@ library(ggdark)
 library(lubridate)
 theme_set(theme_tufte())
 theme_set(dark_theme_light())
+library(tidytext)
+library(snakecase)
+library(tidylo)
 
 ```
 
@@ -185,6 +188,26 @@ netflix_titles %>%
 netflix_titles %>%
   filter(rating %in% c("R", "TV-MA")) %>%
   count(country, sort = TRUE)
+
+netflix_titles %>%
+  filter(!is.na(rating), !is.na(country)) %>%
+  group_by(type, country = fct_lump(country, 9)) %>%
+  summarize(n_mature = sum(rating %in% c("R", "TV-MA", "NC-17")),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(pct_mature = n_mature / n, 
+         conf_low = qbeta(.025, n_mature + 0.5, n - n_mature + 0.5),
+         conf_high = qbeta(0.975, n_mature + 0.5, n - n_mature +0.5)) %>%
+  mutate(country = fct_reorder(country, n)) %>%
+  ggplot(aes(pct_mature, country, color = type)) +
+  geom_point(aes(size = n)) +
+  geom_errorbar(aes(xmin = conf_low, xmax = conf_high)) +
+  scale_x_continuous(labels = percent) +
+  expand_limits(x = 0) +
+  labs(x = "% Mature",
+       y = "",
+       title = "Which countries produce the most mature-rated Netflix content?")
+  
 ```
 
 ```{r}
@@ -219,5 +242,42 @@ netflix_titles %>%
   #mutate(mean_rating = fct_reorder(mean_rating, n)) %>% 
   ggplot(aes(mean_rating, director)) +
   geom_col()
+```
+
+Can we predict rating?
+```{r}
+words_unnested <- netflix_titles %>%
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words, by = "word") 
+
+words_unnested %>%
+  count(type, word, sort = TRUE) %>%
+  mutate(type = to_snake_case(type)) %>%
+  spread(type, n, fill = 0) %>%
+  mutate(total = movie + tv_show) %>%
+  arrange(desc(total)) %>%
+  head(100) %>%
+  ggplot(aes(movie, tv_show)) +
+  geom_point() +
+  geom_text(aes(label = word), vjust = 1, hjust = 1) +
+  scale_x_log10() +
+  scale_y_log10()
+           
+
+words_unnested %>%
+  count(type, word) %>%
+  bind_log_odds(type, word, n) %>%
+  arrange(desc(log_odds_weighted)) %>%
+  group_by(type) %>%
+  top_n(10, log_odds_weighted) %>%
+  ungroup() %>%
+  mutate(word = fct_reorder(word, log_odds_weighted)) %>%
+  ggplot(aes(log_odds_weighted, word)) +
+  geom_col() +
+  facet_wrap(~type, scales = "free_y") +
+  labs(x = "Log odds weighted",
+       y = "Word",
+       title = "What words are most overrepresented in Netflix titles and descriptions?")
+  
 ```
 
